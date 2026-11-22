@@ -143,9 +143,11 @@ jobs:
   vercel:
     name: deploy console to Vercel
     # main -> production; pull requests from this repo -> preview. Forks have no secrets, so they skip.
+    # Skipped until the repo variable VERCEL_PROJECT_ID is set.
     if: >-
+      vars.VERCEL_PROJECT_ID != '' && (
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
     needs: [secrets, console]
     runs-on: ubuntu-24.04
     environment: ${{ github.event_name == 'push' && 'vercel-production' || 'vercel-preview' }}
@@ -157,8 +159,8 @@ jobs:
       cancel-in-progress: false
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_ENV: ${{ github.event_name == 'push' && 'production' || 'preview' }}
     steps:
       - uses: actions/checkout@v4
