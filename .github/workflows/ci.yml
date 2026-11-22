@@ -1,0 +1,221 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: gitleaks (full history)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.3 \
+            git /repo --config /repo/.gitleaks.toml --redact --exit-code 1
+      - name: .env.example holds key names only
+        run: ./scripts/check-env-example.sh
+
+  java:
+    name: java build and tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - name: "Build and test (Testcontainers: real Postgres and Redis)"
+        run: ./gradlew --no-daemon build
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: java-test-reports
+          path: "**/build/reports/tests/"
+
+  adversarial:
+    name: adversarial suite (blocking)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - run: ./gradlew --no-daemon adversarialTest
+
+  chain-verify:
+    name: chain-verify builds alone
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Build with no other package present
+        run: |
+          mkdir /tmp/isolated && cp -r packages/chain-verify /tmp/isolated/
+          cd /tmp/isolated/chain-verify && ./build.sh && ./test.sh
+
+  classifier:
+    name: classifier tests and recall gate
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/classifier
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/classifier/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+      - name: Recall on dangerous actions must be 100%
+        run: python eval/run_eval.py --assert-recall 1.0
+
+  console:
+    name: console build
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/console/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  e2e:
+    name: demo, e2e and accessibility
+    runs-on: ubuntu-24.04
+    needs: [java, classifier, console]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Start the stack
+        run: ./scripts/demo-up.sh
+      - name: Gate off deletes 1,284 rows
+        run: ./scripts/demo-reset.sh && ./scripts/demo-run.sh --gate off
+      - name: Gate on drops the injection, escalates, archives 1,072
+        run: ./scripts/demo-reset.sh && ./scripts/demo-run.sh --gate on
+      - name: Audit chain verifies; tampering is detected
+        env:
+          WARRANT_DEV_EMAIL: daniel@acme.example
+          WARRANT_TENANT: acme
+        run: ./scripts/warrant audit verify --from 1 --to 99999 && ./scripts/demo-tamper.sh
+      - name: Escalation survives a gateway restart
+        run: ./scripts/chaos-restart-during-escalation.sh
+      - name: Console accessibility and keyboard-only approval
+        working-directory: apps/console
+        run: npm ci && npx playwright install --with-deps chromium && npm run e2e
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f deploy/docker-compose.yml logs --no-color --tail 300
+
+  vercel:
+    name: deploy console to Vercel
+    # main -> production; pull requests from this repo -> preview. Forks have no secrets, so they skip.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    needs: [secrets, console]
+    runs-on: ubuntu-24.04
+    environment: ${{ github.event_name == 'push' && 'vercel-production' || 'vercel-preview' }}
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: vercel-${{ github.ref }}
+      cancel-in-progress: false
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ENV: ${{ github.event_name == 'push' && 'production' || 'preview' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --global vercel@65.12.1
+      # The Vercel project's Root Directory is apps/console, so the CLI runs from the repo root.
+      - name: Pull project settings and env vars
+        run: vercel pull --yes --environment="$VERCEL_ENV" --token="$VERCEL_TOKEN"
+      - name: Build
+        run: vercel build ${{ env.VERCEL_ENV == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN"
+      - name: Deploy
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt ${{ env.VERCEL_ENV == 'production' && '--prod' || '' }} --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed to $url" >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment preview URL on the PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --repo "${{ github.repository }}" --body "Vercel preview: ${{ steps.deploy.outputs.url }}"
+
+  deploy:
+    name: deploy to Google Cloud
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.GCP_PROJECT_ID != ''
+    needs: [secrets, java, adversarial, chain-verify, classifier, console, e2e]
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REGISTRY: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/warrant
+      TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+      - name: Build and push images (immutable tags)
+        run: |
+          docker build -f deploy/docker/java.Dockerfile --build-arg APP=control-plane -t "$REGISTRY/control-plane:$TAG" .
+          docker build -f deploy/docker/java.Dockerfile --build-arg APP=pep-gateway -t "$REGISTRY/pep-gateway:$TAG" .
+          docker build -t "$REGISTRY/classifier:$TAG" apps/classifier
+          docker build -t "$REGISTRY/console:$TAG" apps/console
+          for image in control-plane pep-gateway classifier console; do docker push "$REGISTRY/$image:$TAG"; done
+      - name: Migrate, then roll out
+        run: |
+          gcloud run jobs update warrant-migrate --region "${{ vars.GCP_REGION }}" --image "$REGISTRY/control-plane:$TAG"
+          gcloud run jobs execute warrant-migrate --region "${{ vars.GCP_REGION }}" --wait
+          gcloud run deploy warrant-control-plane --region "${{ vars.GCP_REGION }}" --image "$REGISTRY/control-plane:$TAG"
+          gcloud run deploy warrant-classifier --region "${{ vars.GCP_REGION }}" --image "$REGISTRY/classifier:$TAG"
+          gcloud run deploy warrant-pep-gateway --region "${{ vars.GCP_REGION }}" --image "$REGISTRY/pep-gateway:$TAG"
+          gcloud run deploy warrant-console --region "${{ vars.GCP_REGION }}" --image "$REGISTRY/console:$TAG"

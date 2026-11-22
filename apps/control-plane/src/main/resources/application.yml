@@ -1,0 +1,100 @@
+server:
+  port: ${WARRANT_CP_PORT:8081}
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+    whitelabel:
+      enabled: false
+  tomcat:
+    max-swallow-size: 2MB
+    max-http-form-post-size: 1MB
+
+spring:
+  application:
+    name: warrant-control-plane
+  main:
+    banner-mode: off
+  threads:
+    virtual:
+      enabled: true
+  data:
+    redis:
+      host: ${WARRANT_REDIS_HOST:localhost}
+      port: ${WARRANT_REDIS_PORT:6379}
+      ssl:
+        enabled: ${WARRANT_REDIS_TLS:false}
+      timeout: 500ms
+      connect-timeout: 1s
+  flyway:
+    enabled: ${WARRANT_DB_MIGRATE:true}
+    locations: classpath:db/migration
+    placeholders:
+      runtime_user: ${WARRANT_DB_RUNTIME_USER:}
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+  servlet:
+    multipart:
+      enabled: false
+  mvc:
+    problemdetails:
+      enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+warrant:
+  env: ${WARRANT_ENV:local}
+  migrate-only: ${WARRANT_MIGRATE_ONLY:false}
+  region: ${WARRANT_REGION:local}
+  version: 1.0.0
+  db:
+    instance: ${WARRANT_DB_INSTANCE:}
+    name: ${WARRANT_DB_NAME:warrant}
+    iam-user: ${WARRANT_DB_IAM_USER:}
+    host: ${WARRANT_DB_HOST:localhost}
+    port: ${WARRANT_DB_PORT:5432}
+    local-user: ${WARRANT_DB_LOCAL_USER:postgres}
+    pool-size: ${WARRANT_DB_POOL_SIZE:20}
+  keys:
+    dev-keys-dir: ${WARRANT_DEV_KEYS_DIR:.local/keys}
+    envelope-key-uri: ${WARRANT_KMS_ENVELOPE_KEY:}
+  secrets:
+    local-dir: ${WARRANT_LOCAL_SECRETS_DIR:.local/secrets}
+  internal:
+    allowed-networks: ${WARRANT_INTERNAL_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12,192.168.0.0/16,10.0.0.0/8}
+    pep-service-account: ${WARRANT_PEP_SERVICE_ACCOUNT:}
+    audience: ${WARRANT_CONTROL_PLANE_URL:http://localhost:8081}
+  oidc:
+    audience: ${WARRANT_OIDC_AUDIENCE:}
+  escalation:
+    coalesce-window: ${WARRANT_ESCALATION_COALESCE_WINDOW:120s}
+    fresh-auth-window: 5m
+    sweep-interval-ms: 1000
+  audit:
+    head-every: 1000
+    head-interval: 60s
+    batch-max: 500
+    stream: warrant:audit
+    consumer-group: audit-svc
+  channels:
+    chat-webhook-secret: ${WARRANT_CHAT_WEBHOOK_SECRET:}
+    slack-webhook-secret: ${WARRANT_SLACK_WEBHOOK_SECRET:}
+    smtp-secret: ${WARRANT_SMTP_SECRET:}
+    email-from: ${WARRANT_EMAIL_FROM:}
+    console-base-url: ${WARRANT_CONSOLE_URL:http://localhost:3000}
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: WARN
+    org.flywaydb: INFO

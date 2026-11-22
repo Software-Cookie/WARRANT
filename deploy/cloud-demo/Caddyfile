@@ -1,0 +1,9 @@
+# Public entry point for the single-VM demo: HTTPS (Let's Encrypt, automatic) in front of the console.
+# Only the console is published. The gateway, control plane, databases and classifier stay on the private Docker network.
+# Sign-in happens on the console's own page (with the demo access code); there is no browser password pop-up.
+{$WARRANT_SITE} {
+	encode gzip
+	@www host www.{$WARRANT_DOMAIN}
+	redir @www https://{$WARRANT_DOMAIN}{uri} permanent
+	reverse_proxy console:3000
+}

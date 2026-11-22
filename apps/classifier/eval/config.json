@@ -1,0 +1,5 @@
+{
+  "drift_escalate": 0.45,
+  "confidence_floor": 0.6,
+  "min_precision": 0.9
+}

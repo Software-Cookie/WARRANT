@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# The warrant CLI. Locally: export WARRANT_DEV_EMAIL=daniel@acme.example (auditor) or another seeded user.
+# In Google Cloud: export WARRANT_TOKEN="$(gcloud auth print-identity-token --audiences=<console client id>)".
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && (pwd -W 2>/dev/null || pwd))"
+JAR="$ROOT/packages/sdk-java/build/libs/warrant-cli.jar"
+if [[ ! -f "$JAR" ]]; then
+  (cd "$ROOT" && ./gradlew -q :sdk-java:cliJar) >&2
+fi
+exec java -jar "$JAR" "$@"

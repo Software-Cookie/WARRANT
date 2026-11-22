@@ -1,0 +1,10 @@
+[project]
+name = "warrant-classifier"
+version = "1.0.0"
+description = "Warrant L2 semantic classifier: blast radius, intent drift and approval-card wording."
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]

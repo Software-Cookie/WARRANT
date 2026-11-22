@@ -1,0 +1,18 @@
+{
+  "tenants": [
+    {
+      "id": "acme",
+      "name": "Acme Corp",
+      "region": "local",
+      "escalation_ttl_seconds": 300,
+      "settings": { "rows_ceiling_default": 250 },
+      "users": [
+        { "email": "r.menon@acme.example", "roles": ["approver", "developer"] },
+        { "email": "priya@acme.example", "roles": ["security_admin", "owner"] },
+        { "email": "meera@acme.example", "roles": ["developer"] },
+        { "email": "daniel@acme.example", "roles": ["auditor"] }
+      ],
+      "approvers": ["r.menon@acme.example"]
+    }
+  ]
+}

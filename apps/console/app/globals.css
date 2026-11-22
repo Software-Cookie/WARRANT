@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens. Neutrals carry the interface; exactly three signal colours exist:
+ *   danger #8C2F23   caution #7A5A14   safe #28543F
+ * Signals are always drawn as fills with --on-signal text, which keeps 4.5:1 in both themes.
+ * Anything that is not dangerous, pending or healthy is grey.
+ */
+:root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+
+  --bg: 247 247 245;
+  --surface: 255 255 255;
+  --sunken: 240 240 237;
+  --line: 222 221 216;
+  --ink: 24 24 22;
+  --muted: 82 82 78;
+  --faint: 112 112 107;
+  --accent: 24 24 22;
+  --on-accent: 255 255 255;
+
+  --danger: 140 47 35;
+  --caution: 122 90 20;
+  --safe: 40 84 63;
+  --on-signal: 255 255 255;
+
+  --focus: 24 24 22;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: 16 16 15;
+    --surface: 26 26 24;
+    --sunken: 20 20 19;
+    --line: 52 52 49;
+    --ink: 236 236 232;
+    --muted: 176 176 170;
+    --faint: 150 150 144;
+    --accent: 236 236 232;
+    --on-accent: 16 16 15;
+    --focus: 236 236 232;
+    color-scheme: dark;
+  }
+}
+
+html, body {
+  background: rgb(var(--bg));
+  color: rgb(var(--ink));
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 3px solid rgb(var(--focus));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.brand-light { display: block; }
+.brand-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  .brand-light { display: none; }
+  .brand-dark { display: block; }
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

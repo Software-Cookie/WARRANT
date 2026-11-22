@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars (git-ignored) and fill in. No secrets belong in this file.
+project_id        = ""
+region            = "asia-south1"
+env               = "prod"
+image_tag         = ""
+domain            = ""
+tenants           = ["acme"]
+oidc_client_id    = ""
+github_repository = ""

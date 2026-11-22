@@ -1,0 +1,15 @@
+**/build
+**/.gradle
+**/node_modules
+**/.next
+**/__pycache__
+**/.pytest_cache
+**/.venv
+.git
+.local
+deploy/terraform/.terraform
+deploy/terraform/*.tfstate*
+packages/chain-verify/verify
+packages/chain-verify/fixtures
+*.pem
+.env

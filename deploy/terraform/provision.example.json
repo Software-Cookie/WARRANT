@@ -1,0 +1,16 @@
+{
+  "tenants": [
+    {
+      "id": "acme",
+      "name": "Acme Corp",
+      "region": "asia-south1",
+      "idp_issuer": "https://accounts.google.com",
+      "escalation_ttl_seconds": 300,
+      "kms_key_version": "projects/PROJECT_ID/locations/asia-south1/keyRings/warrant/cryptoKeys/acme-warrant/cryptoKeyVersions/1",
+      "kms_audit_key_version": "projects/PROJECT_ID/locations/asia-south1/keyRings/warrant/cryptoKeys/acme-audit/cryptoKeyVersions/1",
+      "owners": ["security-lead@example.com"],
+      "approvers": ["finance-approver@example.com"],
+      "auditors": ["internal-audit@example.com"]
+    }
+  ]
+}

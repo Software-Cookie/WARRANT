@@ -1,0 +1,27 @@
+# Fixed evaluation order: deny, then escalate, then allow, then the tenant default.
+# A policy that produces both a deny and an allow for the same call denies.
+
+tool "files.write" {
+  deny  if rows > 10
+  allow if rows > 0
+}
+
+default { deny }
+
+test "deny wins over allow for the same call" {
+  given tool "files.write" verb "write" rows 50 irreversible false
+  with  warrant scope ["files.write"]
+  expect deny reason CEILING_EXCEEDED
+}
+
+test "allow applies when no deny matches" {
+  given tool "files.write" verb "write" rows 5 irreversible false
+  with  warrant scope ["files.write"]
+  expect allow
+}
+
+test "unmatched tools fall to the tenant default" {
+  given tool "files.read" verb "read"
+  with  warrant scope ["files.read"]
+  expect deny reason OUT_OF_SCOPE
+}

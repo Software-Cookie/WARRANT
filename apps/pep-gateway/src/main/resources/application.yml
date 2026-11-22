@@ -1,0 +1,73 @@
+server:
+  port: ${WARRANT_PEP_PORT:8080}
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+    whitelabel:
+      enabled: false
+  tomcat:
+    max-swallow-size: 1MB
+    threads:
+      max: 400
+
+spring:
+  application:
+    name: warrant-pep-gateway
+  main:
+    banner-mode: off
+  threads:
+    virtual:
+      enabled: true
+  data:
+    redis:
+      host: ${WARRANT_REDIS_HOST:localhost}
+      port: ${WARRANT_REDIS_PORT:6379}
+      ssl:
+        enabled: ${WARRANT_REDIS_TLS:false}
+      timeout: 150ms
+      connect-timeout: 500ms
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+  mvc:
+    problemdetails:
+      enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+pep:
+  env: ${WARRANT_ENV:local}
+  region: ${WARRANT_REGION:local}
+  version: 1.0.0
+  tenants: ${WARRANT_PEP_TENANTS:acme}
+  control-plane-url: ${WARRANT_CONTROL_PLANE_URL:http://localhost:8081}
+  classifier-url: ${WARRANT_CLASSIFIER_URL:http://localhost:8000}
+  secrets-local-dir: ${WARRANT_LOCAL_SECRETS_DIR:.local/secrets}
+  bundle-poll: PT5S
+  policy-staleness-alert: ${WARRANT_POLICY_STALENESS_ALERT:5m}
+  revocation-poll: PT2S
+  decision-cache-ttl: ${WARRANT_DECISION_CACHE_TTL:60s}
+  classifier-timeout: 600ms
+  classifier-max-concurrency: 64
+  confidence-floor: ${WARRANT_CLASSIFIER_CONFIDENCE_FLOOR:0.6}
+  card-timeout: 1500ms
+  max-hold: 60s
+  audit-stream: warrant:audit
+  rate-limit-per-agent: 200
+  rate-limit-per-tenant: 2000
+  release-poll: PT1S
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: WARN

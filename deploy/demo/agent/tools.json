@@ -1,0 +1,27 @@
+[
+  {
+    "id": "sql.execute",
+    "protocol": "mcp",
+    "derivation": "SQL",
+    "endpoint": "http://acme-erp:8095/tools/sql.execute",
+    "dry_run_endpoint": "http://acme-erp:8095/tools/dry_run",
+    "credential_ref": "local-secret://acme-erp-token",
+    "target_prefix": "acme-prod",
+    "sql_argument": "q",
+    "target_tags": { "acme-prod:ledger": ["ledger"], "acme-prod:general_ledger": ["ledger"] },
+    "alternatives": [
+      { "for_verb": "delete", "resource": "vendors", "tool": "vendors.archive", "argument": "ids",
+        "action_label": "Archive {rows} safe" }
+    ]
+  },
+  {
+    "id": "vendors.archive",
+    "protocol": "mcp",
+    "derivation": "DECLARED",
+    "endpoint": "http://acme-erp:8095/tools/vendors.archive",
+    "dry_run_endpoint": "http://acme-erp:8095/tools/dry_run",
+    "credential_ref": "local-secret://acme-erp-token",
+    "target_prefix": "acme-prod",
+    "effect": { "resource": "vendors", "verb": "archive", "reversible": true, "rows_argument": "ids" }
+  }
+]

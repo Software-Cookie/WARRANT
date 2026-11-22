@@ -1,0 +1,113 @@
+# Acme — vendor data operations.
+# Compiled to a decision tree, versioned and signed on publish. Reviewed like code.
+#
+# Scope gates allow: an action outside the warrant's scope is never auto-allowed. Rules
+# below decide whether such an action is denied outright or put in front of a human.
+
+tool "sql.execute" {
+  verb "select"   { allow }
+  verb "insert"   { allow if rows <= ceiling.rows }
+  verb "update"   { allow if rows <= ceiling.rows }
+  verb "delete"   {
+    deny     if target.tagged("ledger")
+    escalate if irreversible
+    escalate if rows > ceiling.rows
+    escalate if affected.any(protected: ["open_invoice", "under_audit"])
+  }
+  verb "truncate" { deny }
+  verb "drop"     { deny }
+  verb "admin"    { deny }
+}
+
+tool "vendors.archive" {
+  allow    if rows <= ceiling.rows
+  escalate if affected.any(protected: ["open_invoice", "under_audit"])
+}
+
+tool "payments.purge_holds" {
+  escalate if irreversible
+}
+
+tool "email.send" {
+  escalate if recipient.domain not in tenant.allowed_domains
+  deny     if recipient.count > 50 and not warrant.scope.has("bulk.email")
+  allow
+}
+
+# Semantic guardrails — evaluated only for calls that reach L2.
+guardrail "stay_on_mandate" {
+  deny     if drift_score > 0.75
+  escalate if drift_score > 0.45
+}
+
+guardrail "model_confidence" {
+  escalate if confidence < 0.6
+}
+
+# Degradation behaviour (Bible §21.1, constraint C6).
+on classifier_unavailable {
+  verb "select" { allow }
+  default       { escalate }
+}
+
+# ---------------------------------------------------------------- tests
+
+test "bulk delete escalates" {
+  given tool "sql.execute" verb "delete" rows 1284 irreversible true
+  with  warrant scope ["vendors.read", "vendors.archive"] ceiling rows 250
+  expect escalate reason CEILING_EXCEEDED
+}
+
+test "reading vendors is allowed" {
+  given tool "sql.execute" verb "select" target "acme-prod:vendors"
+  with  warrant scope ["vendors.read"]
+  expect allow
+}
+
+test "injected purge of payment holds is denied as drift" {
+  given tool "sql.execute" verb "delete" target "acme-prod:payment_holds" rows 40 drift_score 0.92
+  with  warrant scope ["vendors.read", "vendors.archive"] ceiling rows 250
+  expect deny reason INTENT_DRIFT
+}
+
+test "a delete touching open invoices names the protected records" {
+  given tool "sql.execute" verb "delete" target "acme-prod:vendors" rows 100 protected ["open_invoice"]
+  with  warrant scope ["vendors.read", "vendors.archive"] ceiling rows 250
+  expect escalate reason PROTECTED_RECORDS
+}
+
+test "ledger deletes are denied outright" {
+  given tool "sql.execute" verb "delete" target "acme-prod:ledger" tagged ["ledger"] rows 1
+  with  warrant scope ["ledger.delete"] ceiling rows 250 ceiling irreversible true
+  expect deny reason OUT_OF_SCOPE
+}
+
+test "archiving within the ceiling is allowed" {
+  given tool "vendors.archive" verb "archive" target "acme-prod:vendors" rows 20 irreversible false
+  with  warrant scope ["vendors.archive"] ceiling rows 250
+  expect allow
+}
+
+test "archiving beyond the ceiling escalates" {
+  given tool "vendors.archive" verb "archive" target "acme-prod:vendors" rows 1072 irreversible false
+  with  warrant scope ["vendors.archive"] ceiling rows 250
+  expect escalate reason CEILING_EXCEEDED
+}
+
+test "salami slicing is caught by the cumulative ceiling" {
+  given tool "vendors.archive" verb "archive" target "acme-prod:vendors" rows 5 used_rows 250 irreversible false
+  with  warrant scope ["vendors.archive"] ceiling rows 250
+  expect escalate reason CEILING_EXCEEDED
+}
+
+test "an out-of-scope update is denied" {
+  given tool "sql.execute" verb "update" target "acme-prod:vendors" rows 1
+  with  warrant scope ["vendors.read"] ceiling rows 250
+  expect deny reason OUT_OF_SCOPE
+}
+
+test "dropping a table is denied" {
+  given tool "sql.execute" verb "drop" target "acme-prod:vendors"
+  with  warrant scope ["vendors.read", "vendors.archive"]
+  expect deny reason OUT_OF_SCOPE
+}

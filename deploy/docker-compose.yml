@@ -1,0 +1,153 @@
+# Local and demo environment. Everything runs offline once images are built.
+#   ./scripts/demo-up.sh            build, start, wait for health, register demo tools/agent/policy
+#   ./scripts/demo-reset.sh         restore the seeded Acme data (< 10 s)
+#   ./scripts/demo-run.sh --gate on
+#
+# Security notes for this file:
+#   * No credential is written here. The ERP service token is generated into .local/secrets by
+#     scripts/dev-bootstrap.sh (git-ignored) and mounted read-only only where it is needed.
+#   * Postgres uses trust auth on a private network that publishes no port. Cloud SQL uses IAM auth only.
+#   * Published ports bind to 127.0.0.1; override with WARRANT_PEP_HOST_PORT / WARRANT_CP_HOST_PORT / WARRANT_CONSOLE_HOST_PORT.
+name: warrant
+
+x-java-env: &java-env
+  WARRANT_ENV: local
+  WARRANT_REGION: local
+  WARRANT_REDIS_HOST: redis
+
+services:
+  postgres:
+    image: postgres:16.10-alpine
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./demo/postgres-init:/docker-entrypoint-initdb.d:ro
+      - ./demo/acme:/demo/acme:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d acme"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [backend]
+
+  redis:
+    image: redis:7.2.10-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--protected-mode", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [backend]
+
+  classifier:
+    build: ../apps/classifier
+    environment:
+      WARRANT_CLASSIFIER_BACKEND: heuristic
+      WARRANT_CARD_BACKEND: template
+    read_only: true
+    tmpfs: [/tmp]
+    networks: [backend]
+
+  control-plane:
+    build:
+      context: ..
+      dockerfile: deploy/docker/java.Dockerfile
+      args: { APP: control-plane }
+    environment:
+      <<: *java-env
+      WARRANT_DB_HOST: postgres
+      WARRANT_DB_LOCAL_USER: postgres
+      WARRANT_DB_NAME: warrant
+      WARRANT_BOOTSTRAP_FILE: /config/bootstrap.json
+      WARRANT_DEV_KEYS_DIR: /var/lib/warrant/keys
+      WARRANT_LOCAL_SECRETS_DIR: /run/warrant-secrets
+      WARRANT_CONTROL_PLANE_URL: http://control-plane:8081
+      WARRANT_CONSOLE_URL: http://localhost:3000
+    volumes:
+      - ./demo/bootstrap.json:/config/bootstrap.json:ro
+      - cp-keys:/var/lib/warrant/keys
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/8081'"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+      start_period: 20s
+    ports: ["127.0.0.1:${WARRANT_CP_HOST_PORT:-8081}:8081"]
+    networks: [backend]
+
+  pep-gateway:
+    build:
+      context: ..
+      dockerfile: deploy/docker/java.Dockerfile
+      args: { APP: pep-gateway }
+    environment:
+      <<: *java-env
+      WARRANT_PEP_TENANTS: acme
+      WARRANT_CONTROL_PLANE_URL: http://control-plane:8081
+      WARRANT_CLASSIFIER_URL: http://classifier:8090
+      WARRANT_LOCAL_SECRETS_DIR: /run/warrant-secrets
+    volumes:
+      - ../.local/secrets/acme-erp-token:/run/warrant-secrets/acme-erp-token:ro
+    depends_on:
+      control-plane: { condition: service_healthy }
+      classifier: { condition: service_started }
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/8080'"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+      start_period: 15s
+    read_only: true
+    tmpfs: [/tmp]
+    ports: ["127.0.0.1:${WARRANT_PEP_HOST_PORT:-8080}:8080"]
+    networks: [backend]
+
+  acme-erp:
+    build: ./demo/acme-erp
+    environment:
+      ACME_ERP_TOKEN_FILE: /run/secrets/acme-erp-token
+    volumes:
+      - ../.local/secrets/acme-erp-token:/run/secrets/acme-erp-token:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+    read_only: true
+    tmpfs: [/tmp]
+    networks: [backend]
+
+  console:
+    build: ../apps/console
+    environment:
+      WARRANT_ENV: local
+      WARRANT_CONTROL_PLANE_URL: http://control-plane:8081
+      WARRANT_CONSOLE_URL: http://localhost:3000
+    depends_on:
+      control-plane: { condition: service_healthy }
+    read_only: true
+    tmpfs: [/tmp]
+    ports: ["127.0.0.1:${WARRANT_CONSOLE_HOST_PORT:-3000}:3000"]
+    networks: [backend]
+
+  demo-agent:
+    build: ./demo/agent
+    profiles: [demo]
+    environment:
+      WARRANT_CONTROL_PLANE_URL: http://control-plane:8081
+      WARRANT_PEP_URL: http://pep-gateway:8080
+      ACME_ERP_URL: http://acme-erp:8095
+    volumes:
+      - agent-keys:/agent-keys
+      - ../policies/examples/vendors.policy:/policies/vendors.policy:ro
+    networks: [backend]
+
+volumes:
+  pgdata: {}
+  cp-keys: {}
+  agent-keys: {}
+
+networks:
+  backend: {}

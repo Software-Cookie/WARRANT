@@ -1,0 +1,19 @@
+# gitleaks configuration: default rules plus project-specific ones. CI scans the full history on every push.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "warrant-dev-session-token"
+description = "Warrant development session token"
+regex = '''ds1\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}'''
+
+[[rules]]
+id = "warrant-token-in-env-example"
+description = "A value in .env.example (keys only)"
+path = '''\.env\.example$'''
+regex = '''(?m)^[A-Z0-9_]+=.+$'''
+
+[allowlist]
+description = "Test fixtures that are clearly not secrets"
+regexes = ['''test-token-not-a-secret''']
+paths = ['''apps/console/package-lock\.json''', '''deploy/terraform/\.terraform\.lock\.hcl''']
