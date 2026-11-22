@@ -12,6 +12,15 @@ export function controlPlaneUrl(): string {
   return (process.env.WARRANT_CONTROL_PLANE_URL ?? "http://localhost:8081").replace(/\/+$/, "");
 }
 
+/**
+ * Headers for every control-plane call. When the console runs off the demo VM (e.g. on Vercel), the VM only lets
+ * requests through that carry WARRANT_CP_PROXY_KEY, so the control plane is never open to the internet.
+ */
+export function controlPlaneHeaders(headers: Record<string, string>): Record<string, string> {
+  const key = process.env.WARRANT_CP_PROXY_KEY;
+  return key ? { ...headers, "X-Warrant-Proxy-Key": key } : headers;
+}
+
 export function isDevelopment(): boolean {
   return ["local", "demo", "test"].includes(process.env.WARRANT_ENV ?? "local");
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { accessCodeMatches, clientAddress, lockedOut, recordFailure } from "@/lib/access";
 import { sameOriginWrite } from "@/lib/guard";
-import { controlPlaneUrl, isDevelopment, startSession } from "@/lib/session";
+import { controlPlaneHeaders, controlPlaneUrl, isDevelopment, startSession } from "@/lib/session";
 
 /**
  * Demo sign-in as a seeded user. Absent (404) outside local/demo/test environments. On a public demo deployment
@@ -20,7 +20,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!email || email.length > 254) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   const response = await fetch(`${controlPlaneUrl()}/v1/dev/session`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: controlPlaneHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ email }),
     cache: "no-store",
   }).catch(() => null);

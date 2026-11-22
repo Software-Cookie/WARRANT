@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { allowedPath, sameOriginWrite } from "@/lib/guard";
-import { bearer, controlPlaneUrl, tenant } from "@/lib/session";
+import { bearer, controlPlaneHeaders, controlPlaneUrl, tenant } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +29,7 @@ async function forward(request: Request, context: { params: Promise<{ path: stri
   }
   const upstream = await fetch(`${controlPlaneUrl()}/v1/${joined}${search}`, {
     method: request.method,
-    headers,
+    headers: controlPlaneHeaders(headers),
     body,
     cache: "no-store",
   }).catch(() => null);

@@ -7,3 +7,15 @@
 	redir @www https://{$WARRANT_DOMAIN}{uri} permanent
 	reverse_proxy console:3000
 }
+
+# Control-plane address for a console hosted elsewhere (e.g. Vercel). Only requests carrying the proxy key get through;
+# without it the control plane (including its demo sign-in, which skips the console's access code) stays unreachable.
+# /internal/* is for the gateway only and is never published. The key is stripped before forwarding.
+{$WARRANT_API_SITE} {
+	@denied not header X-Warrant-Proxy-Key {$WARRANT_API_KEY}
+	respond @denied 404
+	@internal path /internal/*
+	respond @internal 404
+	request_header -X-Warrant-Proxy-Key
+	reverse_proxy control-plane:8081
+}

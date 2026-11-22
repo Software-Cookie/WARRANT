@@ -1,4 +1,4 @@
-import { bearer, controlPlaneUrl, tenant } from "@/lib/session";
+import { bearer, controlPlaneHeaders, controlPlaneUrl, tenant } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ export async function GET(request: Request): Promise<Response> {
   const tenantId = await tenant();
   if (tenantId) headers["X-Warrant-Tenant"] = tenantId;
   const upstream = await fetch(`${controlPlaneUrl()}/v1/decisions/stream`, {
-    headers,
+    headers: controlPlaneHeaders(headers),
     cache: "no-store",
     signal: request.signal,
   }).catch(() => null);

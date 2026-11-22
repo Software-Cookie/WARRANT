@@ -52,6 +52,12 @@ elif [[ "$mode" == "https" ]]; then
 else
   site=":80"; site_domain="localhost.invalid"; public="http://${domain:-$ip}"
 fi
+# Second address for the control plane, used by a console hosted elsewhere (Vercel). HTTPS only.
+if [[ "$mode" == "https" ]]; then
+  api_host="api.$site_domain"; api_site="$api_host"; api_public="https://$api_host"
+else
+  api_site="http://api.localhost.invalid"; api_public=""
+fi
 
 "$ROOT/scripts/dev-bootstrap.sh"
 code_file="$ROOT/.local/demo-access-code"
@@ -74,12 +80,19 @@ else
   code=$(tr -d '[:space:]' < "$code_file")
 fi
 
+key_file="$ROOT/.local/cp-proxy-key"
+[[ -s "$key_file" ]] || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' 
+' > "$key_file"
+api_key=$(tr -d '[:space:]' < "$key_file")
+
 env_file="$ROOT/.local/cloud.env"
 cat > "$env_file" <<ENV
 WARRANT_SITE='$site'
 WARRANT_DOMAIN='$site_domain'
 WARRANT_PUBLIC_URL='$public'
 WARRANT_DEMO_ACCESS_CODE='$code'
+WARRANT_API_SITE='$api_site'
+WARRANT_API_KEY='$api_key'
 ENV
 
 CLOUD=("${COMPOSE[@]}" -f "$ROOT/deploy/cloud-demo/compose.cloud.yml" --env-file "$env_file")
@@ -97,6 +110,14 @@ else
   access="none - demo sign-in is open to anyone with the link"
 fi
 cat <<DONE
+if [[ -n "$api_public" ]]; then
+  cat <<API
+   For a console on Vercel, set these in Vercel (Settings > Environment Variables):
+     WARRANT_CONTROL_PLANE_URL = $api_public
+     WARRANT_CP_PROXY_KEY      = $api_key   (saved in ~/WARRANT/.local/cp-proxy-key)
+  ============================================================
+API
+fi
 
   ============================================================
    Warrant is live:   $public
